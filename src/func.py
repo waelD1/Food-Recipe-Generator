@@ -46,7 +46,28 @@ class ToolFunctions:
         else:
             raise Exception(f"Error fetching weather data: {weather_data.get('message', 'Unknown error')}")
 
-  
+    def generate_image_with_dalle(self, description:str) -> str:
+        """
+        Generate an image based on the response that Autogen (using ChatGPT) gives back
+        params :
+            description (str) : description of the recipe that we want to transpose as an image
+        returns : 
+            str url of the image generated
+        """
+        api_key = self.OPENAI_KEY
+        client = OpenAI(api_key=api_key)
+
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=description,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        image_url = response.data[0].url
+        return image_url
+
+
    
 
 class Autogen_tools:
@@ -74,6 +95,7 @@ class Autogen_tools:
                 "If the weather is cold, then suggest a town's specialty that is warm."
                 "If the weather is hot, then suggest a city's specialty that is refreshing."
                 "Please double check that the dish is a town's specialty."
+                "Then, generate a recipe and an beautiful / representative image based on the weather and town's specialty."
                 "Return 'TERMINATE' when the task is done.",
                 llm_config={"config_list": [{"model": "gpt-4", "api_key": self.OPENAI_KEY}]},
             )
@@ -86,10 +108,12 @@ class Autogen_tools:
             )
 
             assistant.register_for_llm(name="weather", description="Get the weather of a town")(functools.partial(self.tool_func.get_weather))
-           
+            assistant.register_for_llm(name="image", description="Generate an image based on a the dish description")(functools.partial(self.tool_func.generate_image_with_dalle))
+
 
             user_proxy.register_for_execution(name="weather")(functools.partial(self.tool_func.get_weather))
-          
+            user_proxy.register_for_execution(name="image")(functools.partial(self.tool_func.generate_image_with_dalle))
+
 
             # Register the weather function for both the assistant and the user proxy
             register_function(
@@ -100,7 +124,15 @@ class Autogen_tools:
                 description="Get the weather of a town",  
             )
 
-        
+            # Register the image generation function for both the assistant and the user proxy
+            register_function(
+                functools.partial(self.tool_func.generate_image_with_dalle),
+                caller=assistant,
+                executor=user_proxy,
+                name="image",
+                description="Generate an image based on the dish description",
+            )
+
             return user_proxy, assistant
         
         except Exception as e:
@@ -122,7 +154,9 @@ class Autogen_tools:
         parsed_data = json.loads(json_str)
         # Get the recipe content
         recipe_content = parsed_data[3]['content']
+        # Get the image URL
+        image_url = parsed_data[4]['content']
      
-        return recipe_content
+        return recipe_content, image_url,
 
 

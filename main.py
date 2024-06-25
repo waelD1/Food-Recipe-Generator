@@ -23,7 +23,7 @@ def main():
                 chat_result = user_proxy.initiate_chat(assistant, message=town)
                 # print(chat_result)
                 # Process chat result to extract recipe and image URL
-                recipe_content = autogen_tools.process_chat_result(chat_result)
+                recipe_content, image_url = autogen_tools.process_chat_result(chat_result)
                 
                 # Display recipe
                 if recipe_content:
@@ -32,6 +32,12 @@ def main():
                 else:
                     st.subheader("There is an issue:")
                     st.markdown("The town is unkown, please try again !")
+
+                # Display image
+                if image_url:
+                    st.subheader("Generated Image:")
+                    st.image(image_url, caption="Generated Image", use_column_width=True)
+
                 
                 
             except Exception as e:
