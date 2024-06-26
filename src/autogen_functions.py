@@ -125,7 +125,7 @@ class Autogen_tools:
                 "If the weather is cold, then suggest a town's specialty that is warm."
                 "If the weather is hot, then suggest a city's specialty that is refreshing."
                 "Please double check that the dish is a town's specialty."
-                "Then, generate a recipe of the dish (the ingredients and how to cool it)"
+                "Then, generate a recipe of the dish (the ingredients and how to cook it)"
                 "Then generate a representative and beautiful image based on the weather and town's specialty."
                 "Finally, generate recommendations using Yelp to find shops where I can buy the dish. You will use the GPS coordinates and the town's name to get the location of the shops / restaurents."
                 "Return 'TERMINATE' when the task is done.",

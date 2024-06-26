@@ -18,11 +18,12 @@ def main():
     if st.button("Generate"):
         if town:
             try:
-                # Initiate chat with Autogen
+                ## Initiate chat with Autogen
+
                 chat_result = None
-                # Import the assistant
+                # Initiate the assistant
                 user_proxy, assistant = autogen_tools.create_autogen_assistant()
-                # Launch the assistant
+                # Initiate the chat with the town's name
                 chat_result = user_proxy.initiate_chat(assistant, message=town)
                 # Use the chat_history to extract the recipe, image and the recommendations
                 recipe_content, image_url, yelp_reco = autogen_tools.process_chat_result(chat_result)
