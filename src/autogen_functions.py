@@ -21,12 +21,15 @@ class ToolFunctions:
     Methods:
         get_weather(town: str) -> dict:
             Returns the weather of a town that the user specified
-        """
+        generate_image_with_dalle(description: str) -> str:
+            Generates and returns the URL of an image created by DALL-E (OpenAI) based on the description.
+    """
 
     def __init__(self) -> None:
-        # Set up the API key for OpenAI, the Weather API 
+        # Set up the API key for OpenAI, the Weather API and Yelp Fusion
         self.WEATHER_API = os.environ["WEATHER_API"]
         self.OPENAI_KEY = os.environ["OPENAI_KEY"]
+        self.YELP_API_KEY = os.environ["YELP_API_KEY"]
  
     def get_weather(self, town:str) -> dict:
         """
@@ -49,9 +52,9 @@ class ToolFunctions:
     def generate_image_with_dalle(self, description:str) -> str:
         """
         Generate an image based on the response that Autogen (using ChatGPT) gives back
-        params :
+        args:
             description (str) : description of the recipe that we want to transpose as an image
-        returns : 
+        returns: 
             str url of the image generated
         """
         api_key = self.OPENAI_KEY
@@ -68,13 +71,40 @@ class ToolFunctions:
         return image_url
 
 
-   
+    def yelp_fusion_api(self, term: str, latitude: float, longitude: float, limit: int = 5) -> list:
+        headers = {
+            "Authorization": f"Bearer {self.YELP_API_KEY}"
+        }
+        url = "https://api.yelp.com/v3/businesses/search"
+        params = {
+            "term": term,
+            "latitude": latitude,
+            "longitude": longitude,
+            "limit": limit
+        }
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            return response.json()["businesses"]
+        else:
+            raise Exception(f"Error fetching Yelp data: {response.json().get('error', {}).get('description', 'Unknown error')}")
 
 class Autogen_tools:
+    """
+    Autogen_tools is a class which create and parameter agent from autogen
+
+    Methods:
+        create_autogen_assistant: Returns the user_proxy and the assistant
+
+        process_chat_result(chat_result: str):
+                    Parse the chat_history and returns the recipe (str), image URL (str) and the Yelp shops'recommendations (str)
+    """
 
     def __init__(self) -> None:
+        # Set up the API key for OpenAI, the Weather API and Yelp Fusion
         self.WEATHER_API = os.environ["WEATHER_API"]
         self.OPENAI_KEY = os.environ["OPENAI_KEY"]
+        self.YELP_API_KEY = os.environ["YELP_API_KEY"]
+        # Call the class ToolFunctions above to use its functions in the create assistant function
         self.tool_func = ToolFunctions()
 
     def create_autogen_assistant(self):
@@ -95,7 +125,9 @@ class Autogen_tools:
                 "If the weather is cold, then suggest a town's specialty that is warm."
                 "If the weather is hot, then suggest a city's specialty that is refreshing."
                 "Please double check that the dish is a town's specialty."
-                "Then, generate a recipe and an beautiful / representative image based on the weather and town's specialty."
+                "Then, generate a recipe of the dish (the ingredients and how to cool it)"
+                "Then generate a representative and beautiful image based on the weather and town's specialty."
+                "Finally, generate recommendations using Yelp to find shops where I can buy the dish. You will use the GPS coordinates and the town's name to get the location of the shops / restaurents."
                 "Return 'TERMINATE' when the task is done.",
                 llm_config={"config_list": [{"model": "gpt-4", "api_key": self.OPENAI_KEY}]},
             )
@@ -107,12 +139,16 @@ class Autogen_tools:
                 human_input_mode="NEVER",
             )
 
+            # Register tools / functions to the assistant
+            # We use functools.partial to allows the functions to be called later without having to specify its arguments again
             assistant.register_for_llm(name="weather", description="Get the weather of a town")(functools.partial(self.tool_func.get_weather))
             assistant.register_for_llm(name="image", description="Generate an image based on a the dish description")(functools.partial(self.tool_func.generate_image_with_dalle))
+            assistant.register_for_llm(name="yelp_reco", description="Generate a list of the town'shops that serve the dish generated")(functools.partial(self.tool_func.yelp_fusion_api))
 
-
+            # Register tools / functions to the user_proxy agent
             user_proxy.register_for_execution(name="weather")(functools.partial(self.tool_func.get_weather))
             user_proxy.register_for_execution(name="image")(functools.partial(self.tool_func.generate_image_with_dalle))
+            user_proxy.register_for_execution(name="yelp_reco")(functools.partial(self.tool_func.yelp_fusion_api))
 
 
             # Register the weather function for both the assistant and the user proxy
@@ -132,31 +168,39 @@ class Autogen_tools:
                 name="image",
                 description="Generate an image based on the dish description",
             )
-
+            # Register the Yelp map function for both the assistant and the user proxy
+            register_function(
+                functools.partial(self.tool_func.yelp_fusion_api),
+                caller=assistant,
+                executor=user_proxy,
+                name="yelp_reco",
+                description="Get a list of recommended shops of the closest food store in the town that sell the meal in the recipe",
+            )
+           
             return user_proxy, assistant
         
         except Exception as e:
             print(f"Error in create_autogen_assistant: {str(e)}")
             raise
 
-
     def process_chat_result(self, chat_result):
         """
-        The goal is to extract the response of Autogen through the chat history in order to extract the recipe content
-        The goal is to get these results and display them in Streamlit.
+        The goal is to extract the response of Autogen through the chat history in order to extract the recipe content, the image URL, and the name of the meal. 
+        Then, we display it in Streamlit.
+        Args:
+            chat_result (list) : the chat history from Autogen
+
         """
         # Get the chat history containing all the results of Autogen
         messages = chat_result.chat_history  
-
-        # Convert the list of dictionaries to a JSON string
-        json_str = json.dumps(messages)
-        # Parse the JSON string into Python objects
-        parsed_data = json.loads(json_str)
         # Get the recipe content
-        recipe_content = parsed_data[3]['content']
+        recipe_content = messages[3]['content']
         # Get the image URL
-        image_url = parsed_data[4]['content']
-     
-        return recipe_content, image_url,
-
+        image_url = messages[4]['content']
+        # Get the name of the meal
+        # meal_description = ast.literal_eval(parsed_data[3]['tool_calls'][0]['function']['arguments'])['description']
+        # Get the map
+        yelp_reco_list = messages[7]['content']
+         
+        return recipe_content, image_url, yelp_reco_list
 
