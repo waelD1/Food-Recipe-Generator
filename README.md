@@ -8,6 +8,9 @@ This project generate a food recipe according to the weather and the city'specia
 
 We  use Python 3.10.9 version for this project.
 
+Command to launch the project : 
+- streamlit run main.py --logger.level=debug
+
 # Examples
 Here are an example of the result in streamlit :
 <br> <b>For the recipe </b>: <p></p>
